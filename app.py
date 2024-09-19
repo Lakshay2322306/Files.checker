@@ -13,11 +13,10 @@ logger = logging.getLogger(__name__)
 
 # Bot token and owner group ID are stored in environment variables
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7809919991:AAFwHo329iTIGLyDpbjTE1OMuZGnqp9cDLs")
-OWNER_GROUP_ID = os.getenv("OWNER_GROUP_ID", "1984816095")
+OWNER_CHAT_ID = os.getenv("OWNER_CHAT_ID", "1984816095")
 
 # Owner information
 OWNER_USERNAME = "@Jukerhenapadega"
-OWNER_CHAT_ID = "1984816095"
 
 # Luhn algorithm to validate credit cards
 def luhn_check(card_number):
@@ -77,9 +76,9 @@ def handle_owner_command(message):
         return "✅ Bot is running smoothly."
 
     elif message == "/credits":
-        return f"This bot was created and managed by {OWNER_USERNAME} (Chat ID: {OWNER_CHAT_ID})."
+        return f"This bot was created and managed by {OWNER_USERNAME}."
 
-    return "Unknown command."
+    return "Unknown command. Please use /status or /credits."
 
 # Handle incoming messages
 @app.route('/webhook', methods=['POST'])
@@ -87,25 +86,26 @@ def webhook():
     data = request.get_json()
     logger.info(f'Received webhook data: {data}')
 
-    if not data:
-        logger.warning("No data received in the webhook request.")
-        return "No data received", 400
+    if not data or 'message' not in data:
+        logger.warning("No valid message data received in the webhook request.")
+        return "No valid message data received", 400
 
-    chat_id = data.get('message', {}).get('chat', {}).get('id')
-    text = data.get('message', {}).get('text')
+    message = data.get('message')
+    chat_id = message.get('chat', {}).get('id')
+    text = message.get('text', "")
 
     if chat_id and text:
-        logger.info(f'Received message from {chat_id}: {text}')
-        if chat_id == int(OWNER_CHAT_ID):
-            # Handle commands from owner
+        logger.info(f'Received message from chat_id {chat_id}: {text}')
+        if str(chat_id) == OWNER_CHAT_ID:
             response_text = handle_owner_command(text)
         else:
             response_text = "This command is not recognized."
 
-        # Send response to the chat
         send_message(chat_id, response_text)
+        return "OK", 200
 
-    return "OK", 200
+    logger.warning("Chat ID or text missing in the message.")
+    return "Chat ID or text missing", 400
 
 # Handle the file checking process
 @app.route('/check', methods=['POST'])
@@ -113,23 +113,18 @@ def check():
     if 'file' not in request.files:
         return "Error: No file uploaded", 400
 
-    # Save the uploaded file temporarily
     file = request.files['file']
     file_path = f"input_{int(time.time())}.txt"
     file.save(file_path)
 
-    # Create output files for valid and invalid cards
     pass_file = f"pass_luhn_{int(time.time())}.txt"
     fail_file = f"fail_luhn_{int(time.time())}.txt"
 
-    # Process the file and get the results
     valid_count, invalid_count = check_cards(file_path, pass_file, fail_file)
 
-    # Send the files to the owner's group
     send_file_to_group(BOT_TOKEN, OWNER_CHAT_ID, pass_file, caption="✅ Valid Cards:")
     send_file_to_group(BOT_TOKEN, OWNER_CHAT_ID, fail_file, caption="❌ Invalid Cards:")
 
-    # Clean up the temporary input file
     os.remove(file_path)
 
     return f"Check complete: {valid_count} valid cards, {invalid_count} invalid cards."
