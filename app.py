@@ -11,7 +11,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Bot token and owner group ID are stored in environment variables
+# Bot token and owner group ID
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7809919991:AAFwHo329iTIGLyDpbjTE1OMuZGnqp9cDLs")
 OWNER_CHAT_ID = os.getenv("OWNER_CHAT_ID", "1984816095")
 
@@ -64,21 +64,41 @@ def send_message(chat_id, text):
     url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
     payload = {
         'chat_id': chat_id,
-        'text': text
+        'text': text,
+        'parse_mode': 'Markdown'  # Use Markdown for better text formatting
     }
     response = requests.post(url, data=payload)
     logger.info(f'Sent message to {chat_id}: {response.json()}')
     return response
 
-# Owner-only command: Broadcast a message to the owner group
-def handle_owner_command(message):
-    if message == "/status":
-        return "✅ Bot is running smoothly."
-
-    elif message == "/credits":
-        return f"This bot was created and managed by {OWNER_USERNAME}."
-
-    return "Unknown command. Please use /status or /credits."
+# Handle incoming messages and commands
+def handle_command(chat_id, message):
+    if message.strip() == "/start":
+        return (
+            "🎉 *Welcome to the Credit Card Checker Bot!* 🎉\n\n"
+            "I'm here to help you validate credit card numbers. Use the following commands:\n"
+            "- `/status` to check the bot's status.\n"
+            "- `/credits` to see the bot creator.\n"
+            "- `/help` for a list of available commands.\n\n"
+            "Feel free to send me a file for credit card validation!"
+        )
+    elif message.strip() == "/status":
+        return "✅ *Bot Status*: The bot is up and running smoothly!"
+    elif message.strip() == "/credits":
+        return f"🙌 This bot was created and managed by {OWNER_USERNAME}."
+    elif message.strip() == "/help":
+        return (
+            "ℹ️ *Help Menu:* ℹ️\n\n"
+            "Here are the commands you can use:\n"
+            "- `/start` - Welcome message and bot introduction.\n"
+            "- `/status` - Check if the bot is running.\n"
+            "- `/credits` - Information about the bot creator.\n"
+            "- `/check` - Upload a file with credit card numbers for validation."
+        )
+    elif message.startswith("/file"):
+        return "📂 To upload a file, use the `/check` command followed by the file attachment."
+    else:
+        return "❓ *Unknown command.* Please use `/help` to see the list of available commands."
 
 # Handle incoming messages
 @app.route('/webhook', methods=['POST'])
@@ -90,17 +110,14 @@ def webhook():
         logger.warning("No valid message data received in the webhook request.")
         return "No valid message data received", 400
 
-    message = data.get('message')
+    message = data.get('message', {})
     chat_id = message.get('chat', {}).get('id')
-    text = message.get('text', "")
+    text = message.get('text', "").strip()
+
+    logger.info(f'Received message from chat_id {chat_id}: "{text}"')
 
     if chat_id and text:
-        logger.info(f'Received message from chat_id {chat_id}: {text}')
-        if str(chat_id) == OWNER_CHAT_ID:
-            response_text = handle_owner_command(text)
-        else:
-            response_text = "This command is not recognized."
-
+        response_text = handle_command(chat_id, text)
         send_message(chat_id, response_text)
         return "OK", 200
 
@@ -127,12 +144,14 @@ def check():
 
     os.remove(file_path)
 
-    return f"Check complete: {valid_count} valid cards, {invalid_count} invalid cards."
+    return f"✅ Check complete: {valid_count} valid cards, {invalid_count} invalid cards."
 
 @app.route('/')
 def home():
-    return f"💳 Welcome to the Credit Card Checker Bot! 💳\n\n" \
-           f"Credits: This bot was created and managed by {OWNER_USERNAME}."
+    return (
+        "💳 Welcome to the Credit Card Checker Bot! 💳\n\n"
+        "Credits: This bot was created and managed by {OWNER_USERNAME}."
+    )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", 5000)))
